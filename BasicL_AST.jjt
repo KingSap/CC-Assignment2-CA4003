@@ -1,0 +1,266 @@
+/***** SECTION 1 - OPTIONS *****/
+
+
+options {
+	IGNORE_CASE = true;
+	MULTI = true;
+	NODE_DEFAULT_VOID = true;
+	VISITOR = true;
+
+}
+
+/* **** SECTION 2 - USER CODE **** */
+
+PARSER_BEGIN (basicL_AST)
+	
+import java.io.*;
+import java.util.*;
+
+class basicL_AST {
+	public static void main(String[] args) throws ParseException, FileNotFoundException {
+		basicL_AST parser;
+		if (args.length < 1){
+			System.out.println("Reading from standard input. This method is not required for this program, so is disabled.");
+			System.out.println("PLEASE PASS A FILE AS AN ARGUMENT PLEASE");
+			return; 			// This is to exit as standard input is not required for this assignment
+		}
+		
+		if (args.length == 1){
+			System.out.println();
+			System.out.println("Parser: Reading from input file " + args[0]);
+			System.out.println();
+			
+			parser = new basicL_AST(new java.io.FileInputStream(args[0]));
+			SimpleNode program = parser.program();
+			
+			System.out.println("******************************************");
+			System.out.println("             Printing the AST             ");
+			System.out.println("******************************************");
+			program.dump(" ");
+			
+			System.out.println();
+			System.out.println("AST Completed");
+			
+			SemanticVisitor visitor = new SemanticVisitor();
+			program.jjtAccept(visitor, null);
+			
+			System.out.println();
+			System.out.println("Symbol Table Completed");
+			System.out.println();
+								
+		}else{
+			System.out.println("Please pass input file as a single argument. Thank you.");
+			return;
+		}
+		System.out.println("Sean Corcoran's Parser program has parsed successfully. Amazing.");
+	} 
+}
+PARSER_END (basicL_AST)
+
+/***** SECTION 3 - DEFINE LEGAL TOKENS *****/
+
+TOKEN_MGR_DECLS :{
+  static int commentNesting = 0;
+}
+
+SKIP : { 						// Bypass whitespace, tabs and new lines
+	  " "
+	| "\r"
+	| "\t"
+	| "\n"
+	| "\f"
+}
+
+SKIP : {  						// basicL Comment rules
+	< "--" (~["\r", "\n"]) *>
+	|"/*" { commentNesting++; } : IN_COMMENT
+}
+
+<IN_COMMENT> SKIP : {			// handle comments spread accross different lines
+	"/*" { commentNesting++; }
+	| "*/" { commentNesting--;
+	if (commentNesting == 0)
+		SwitchTo(DEFAULT);
+		}
+	| <~[]>
+}
+
+TOKEN : {						// OPERATORS
+	 < PLUS : "+" >
+	| < MINUS : "-" >
+	| < MULTIPLY : "*" >
+	| < DIVIDE : "/" >
+	| < EQUALS : "=" >
+	| < NOTEQUALS : "!=" >
+	| < LESSTHAN : "< " >
+	| < GREATERTHAN : " >" >
+	| < LESSTHANEQ : "<=" >
+	| < GREATERTHANEQ : " >=" >
+	| < LEFTBRACKET : "(" >
+	| < RIGHTBRACKET : ")" >
+	| < COMMA : "," >
+	| < SEMICOLON : ";" >
+	| < COLON : ":" > 
+	| < ASSIGN : ":=" >
+}
+
+TOKEN: {							// Keywords
+		< AND	: "and"   	>
+	| 	< BOOL	: "bool"  	>
+	| 	< CONST	: "const" 	>
+	|  	< DO	: "do"    	>
+	| 	< ELSE	: "else" 	>
+	| 	< FALSE	: "false" 	>
+	| 	< IF	: "if"    	>
+	|	< INT	: "int"		>
+	| 	< MAIN	: "main"  	>
+	| 	< NOT	: "not"   	>
+	| 	< OR	: "or"    	>
+	| 	< RETURN: "return"	>
+	| 	< THEN	: "then"  	>
+	| 	< TRUE  : "true"  	>
+	| 	< VAR	: "var"   	>
+	| 	< VOID	: "void"  	>
+	| 	< WHILE	: "while" 	>
+	| 	< BEGIN	: "begin" 	>
+	| 	< END	: "end"   	>
+}
+
+TOKEN : {							 //  Numbers and ids
+	< NUMBER : (<DIGIT>)+ | (<DIGIT>)+"."(<DIGIT>)+ >  
+	| < #DIGIT : ["0" - "9"] >  
+	| < ID : (<LETTER>)+ ((<DIGIT>)|(<LETTER>)|("_"))* >  
+    | < #LETTER : ["A" - "Z", "a" - "z"] >  
+}
+
+
+TOKEN :{   							// Anything that hasn't been recognised so far 
+	< OTHER : ~[] >
+}
+
+/***** SECTION 4 - GRAMMAR & PRODUCTION RULES *****/
+
+SimpleNode program() #Program: {} {
+	(decl())*
+	(function())*
+	main_prog()
+	{return jjtThis;}
+}
+
+void decl(): {} {
+	( var_decl() | const_decl() )
+}
+
+void var_decl() #VarDeclaration: {} {
+	<VAR> ident_list()<COLON>type()(<COMMA>ident_list()<COLON>type())*<SEMICOLON>
+}
+
+void const_decl() #const_decl: {} {
+	<CONST>id()<COLON>type() <EQUALS> expression()(<COMMA>id()<COLON>type() <EQUALS> expression())*<SEMICOLON>
+}
+
+void function() #Function: {} {
+	type() id() <LEFTBRACKET> param_list() <RIGHTBRACKET>
+	<BEGIN>
+	( decl() )*
+	( statement() <SEMICOLON> )*
+	<RETURN> ( expression() | {} ) <SEMICOLON>
+	<END>
+}
+
+
+void param_list() #param_list: {} {
+	(id()<COLON>type()(<COMMA>id()<COLON>type())* | {})
+}
+
+void type() #Type : { }{
+		<INT>		{ jjtThis.value=token; }
+    | 	<BOOL> 		{ jjtThis.value=token; }
+    | 	<VOID> 		{ jjtThis.value=token; }
+}
+
+void main_prog() #main_prog: {} {
+	<MAIN>
+	<BEGIN>
+	( decl() )*
+	( statement() <SEMICOLON> )*
+	<END>
+}
+
+void statement(): {} {
+	LOOKAHEAD(3)
+	id()<ASSIGN>expression() 
+	|term()
+	|<BEGIN>(statement()<SEMICOLON>)*<END>
+	|<IF>condition()<THEN>statement()<SEMICOLON><ELSE>statement()
+	|<WHILE>condition()<DO>statement()
+	|{}
+}
+
+void expression(): {} {
+	LOOKAHEAD(2) 
+	term()
+	|	fragment() mathematical_symbols()
+}
+
+void term() #Term :{} {
+	id()<LEFTBRACKET>arg_list()<RIGHTBRACKET>
+}
+
+void arg_list() :{} {
+	(<ID>(<COMMA><ID>)* | {})
+}
+
+void fragment(): {} {
+		id()
+	|	number()
+	|	<TRUE> 
+	| 	<FALSE> 
+	|	<PLUS>
+	|	<MINUS>fragment()
+ 	|	expression_brackets()
+}
+
+void condition() #Condition: {} {
+	LOOKAHEAD(2)
+		<LEFTBRACKET> condition() <RIGHTBRACKET> booleans()
+	|	expression() booleans()
+}
+
+void ident_list() #IdList: {} {
+	id() ( <COMMA> id() )*
+}
+
+
+void mathematical_symbols(): {} {
+	<PLUS> expression() 
+	| 	<MINUS> expression()
+	|	<MULTIPLY> expression() 
+	| 	<DIVIDE> expression() 
+	| 	{}
+}
+
+void booleans() : {} {
+		<EQUALS> condition()
+	|	<NOT> condition()
+	|	<NOTEQUALS> condition()
+	|	<GREATERTHAN> condition()
+	| 	<GREATERTHANEQ> condition()
+	| 	<LESSTHANEQ> condition()
+	| 	<LESSTHAN> condition()
+	| 	<AND> condition()
+	|	<OR> condition()
+	| 	{}
+}
+
+void number() #Number: {} {
+	<NUMBER> { jjtThis.value = token; }
+}
+
+void id() #Id: { Token token; } {
+	token = <ID> { jjtThis.value = token; }
+}
+
+void expression_brackets() #ExpressionwithBrackets:{} {
+	<LEFTBRACKET>expression()<RIGHTBRACKET>
+}
