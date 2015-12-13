@@ -1,0 +1,178 @@
+import java.util.*;
+
+@SuppressWarnings("unchecked")
+public class SemanticVisitor implements basicL_ASTVisitor {
+	private static HashMap<String, HashMap<String, STC>> syt = new HashMap<>();
+	private static final String GLOBAL_SCOPE = "Global";
+	private static String scope = GLOBAL_SCOPE;
+
+	public Object visit(ASTProgram node, Object data) {
+		syt.put(scope, new HashMap<String, STC>());
+		node.childrenAccept(this, data);
+
+		System.out.println();
+        System.out.println("*********************************************************************************");
+		System.out.println("                            Printing the symbol table                            ");
+		System.out.println("*********************************************************************************");
+
+        System.out.printf("%-20s%-20s%-20s%-20s%-20s%n", "Type", "Kind", "Id", "Data", "Scope");
+        for (String scope : syt.keySet()) {
+            HashMap<String, STC> stwithScope = syt.get(scope);
+            for (String key : stwithScope.keySet()) {
+                STC sytChild = stwithScope.get(key);
+                System.out.printf("%-20s%-20s%-20s%-20s%-20s%n", 
+				sytChild.getType(),
+				sytChild.type(),
+				sytChild.getId(), 				
+				sytChild.getData(),
+				sytChild.getScope());
+			}
+        }
+		return null;
+	} 
+
+	public Object visit(ASTconst_decl node, Object data) {
+        HashMap<String, STC> stwithScope = syt.get(scope);
+        if(stwithScope == null) stwithScope = new HashMap<String, STC>();
+
+        for (int i = 0; i < node.jjtGetNumChildren(); i=i+3) {
+        	Token id = (Token) node.jjtGetChild(i).jjtAccept(this, data);
+        	Token type = (Token) node.jjtGetChild(i+1).jjtAccept(this, data);
+        	List<Token> attribute;
+            if (node.jjtGetChild(i+2).jjtAccept(this, data) instanceof Token) {
+                attribute = new ArrayList<>();
+                attribute.add((Token) node.jjtGetChild(i).jjtAccept(this, data));
+            } else {
+                attribute = ((List<Token>) node.jjtGetChild(i).jjtAccept(this, data));
+            }
+            STC var = new STC(id, type, scope, Type.CONST);
+            var.addData("Value", attribute);
+
+	        if (stwithScope.get(id.image) == null) {
+				stwithScope.put(id.image, var);
+	            syt.put(scope, stwithScope);
+			} else {
+				System.out.println("OOPs, Id: " + id.image + " is already declared in " + scope + ".");
+	        }
+        }
+        return null;
+    }
+		
+
+	public Object visit(ASTVarDeclaration node, Object data) {
+		for (int i = 0; i < node.jjtGetNumChildren(); i += 2) {
+			List<Token> idList = (List<Token>) node.jjtGetChild(i).jjtAccept(this, data);
+			Token type = (Token) node.jjtGetChild(i+1).jjtAccept(this, data);
+
+			for (Token id : idList) {
+				HashMap<String, STC> sytScoped = syt.get(scope);
+				if (sytScoped == null) sytScoped = new HashMap<>();
+				STC var = new STC(id, type, scope, Type.VAR);
+				HashMap<String, STC> globalScopeSyt = syt.get(GLOBAL_SCOPE);
+            	
+            	if (globalScopeSyt.get(id.image) != null) {
+            		System.out.println("OOPs, Variable: " + id.image + " is already declared in " + GLOBAL_SCOPE + ".");
+            	}
+
+				else if (sytScoped.get(id.image) == null) {
+					sytScoped.put(id.image, var);
+					syt.put(scope, sytScoped);
+				}
+				
+				else System.out.println("OOPs, " + id.image + " was already declared in " + scope);
+			}
+		}
+		return null;
+	}
+	
+	public Object visit(ASTFunction node, Object data) {
+		Token type = (Token) node.jjtGetChild(0).jjtAccept(this, data);
+		Token id = (Token) node.jjtGetChild(1).jjtAccept(this, data);
+		List<Token> list = (List<Token>) node.jjtGetChild(2).jjtAccept(this, data);
+
+		STC function = new STC(id, type, scope, Type.FUNCTION);
+		function.add("Parameters", list);
+
+		HashMap<String, STC> sytAtGlobalScope = syt.get(scope);
+		if (sytAtGlobalScope.get(id.image) == null) {
+			sytAtGlobalScope.put(id.image, function);
+			syt.put(scope, sytAtGlobalScope);
+		}else{
+			System.out.println("OOPs " + id.image + " is already declared in " + scope + ".");
+		}
+		scope = id.image;
+
+		for (int i = 0; i < list.size(); i += 2) {
+			Token paramId = list.get(i);
+			Token paramType = list.get(i + 1);
+			STC funcVar = new STC(paramId, paramType, scope, Type.VAR);
+
+			HashMap<String, STC> sytForFunction = syt.get(scope);
+			if (sytForFunction == null) sytForFunction = new HashMap<>();
+			if (sytForFunction.get(paramId.image) == null) {
+				sytForFunction.put(paramId.image, funcVar);
+				syt.put(scope, sytForFunction);
+			}else {
+				System.out.println("Parameter " + paramId.image + " of type " + paramType.image + " already in scope " + scope);
+			}
+		}
+
+		Token functionBody = (Token) node.jjtGetChild(3).jjtAccept(this, data);
+		return null;
+	}
+
+	public Object visit(ASTIdList node, Object data) {
+		List<Token> tokens = new ArrayList<>();
+		for (int i = 0; i < node.jjtGetNumChildren(); i++) {
+			SimpleNode diffNode = (SimpleNode) node.jjtGetChild(i);
+			Token id = (Token) diffNode.jjtGetValue();
+			tokens.add(id);
+		}
+		return tokens;
+	}
+	
+	public Object visit(ASTparam_list node, Object data) {
+		List<Token> tokens = new ArrayList<Token>();
+		for (int i = 0; i < node.jjtGetNumChildren(); i += 1) {
+			SimpleNode diffNode = (SimpleNode) node.jjtGetChild(i);
+			Token token = (Token) diffNode.jjtGetValue();
+			tokens.add(token);
+		}
+		return tokens;
+	}
+	
+	public Object visit(ASTmain_prog node, Object data) {
+		scope = "Main";
+		node.childrenAccept(this, data);
+		return null;
+	}
+
+	public Object visit(ASTId node, Object data) {	
+		return node.jjtGetValue();
+	}
+
+	public Object visit(ASTExpressionwithBrackets node, Object data) {		
+		return node.jjtGetValue();
+	}
+
+	public Object visit(ASTNumber node, Object data) {
+		return node.jjtGetValue();
+	}
+	
+	public Object visit(ASTCondition node, Object data) {
+		node.childrenAccept(this, data);
+		return null;
+	}
+
+	public Object visit(ASTType node, Object data) {
+		return node.jjtGetValue();
+	}
+	
+	public Object visit(ASTTerm node, Object data) {
+		return node.jjtGetValue();
+	}
+
+	public Object visit(SimpleNode node, Object data) {
+		return null;
+	} 
+}	
