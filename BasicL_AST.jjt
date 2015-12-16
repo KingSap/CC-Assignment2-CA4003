@@ -52,7 +52,7 @@ class basicL_AST {
 			System.out.println("Please pass input file as a single argument. Thank you.");
 			return;
 		}
-		System.out.println("Sean Corcoran's Parser program has parsed successfully. Amazing.");
+		System.out.println("Parser program has parsed successfully. Amazing.");
 	} 
 }
 PARSER_END (basicL_AST)
