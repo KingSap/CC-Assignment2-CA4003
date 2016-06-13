@@ -76,7 +76,7 @@ SKIP : {  						// basicL Comment rules
 	|"/*" { commentNesting++; } : IN_COMMENT
 }
 
-<IN_COMMENT> SKIP : {			// handle comments spread accross different lines
+<IN_COMMENT> SKIP : {			// handle comments spread across different lines
 	"/*" { commentNesting++; }
 	| "*/" { commentNesting--;
 	if (commentNesting == 0)
